@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>みんなで風船バレー - 必殺スマッシュバトル</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            touch-action: none;
+            overflow: hidden;
+            background: linear-gradient(to bottom, #1a202c, #2d3748);
+            font-family: 'sans-serif';
+            user-select: none;
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+        }
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        #balloon {
+            position: absolute;
+            width: 60px;
+            height: 72px;
+            background-color: #f56565;
+            border-radius: 50% 50% 50% 50% / 40% 40% 60% 60%;
+            box-shadow: inset -6px -6px 12px rgba(0,0,0,0.1), 0 6px 10px rgba(0,0,0,0.1);
+            z-index: 20;
+            display: none;
+            pointer-events: none;
+            transition: background-color 0.2s;
+        }
+
+        /* 必殺技エフェクト */
+        .smash-thunder {
+            background-color: #f6e05e !important;
+            box-shadow: 0 0 40px #f6e05e, 0 0 80px #fff, inset -6px -6px 12px rgba(0,0,0,0.1) !important;
+            filter: brightness(1.5);
+        }
+        .smash-flame {
+            background-color: #ed8936 !important;
+            box-shadow: 0 0 40px #f56565, 0 0 80px #ed8936, inset -6px -6px 12px rgba(0,0,0,0.1) !important;
+        }
+        .smash-bubble {
+            background-color: #63b3ed !important;
+            box-shadow: 0 0 40px #fff, 0 0 60px #63b3ed, inset -6px -6px 12px rgba(0,0,0,0.1) !important;
+            opacity: 0.6;
+        }
+
+        #balloon::after {
+            content: '';
+            position: absolute;
+            bottom: -5px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 6px;
+            height: 6px;
+            background-color: inherit;
+            clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+        }
+        
+        .net {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 8px;
+            height: 45%;
+            background: #718096;
+            z-index: 10;
+            border-radius: 4px 4px 0 0;
+            box-shadow: 0 0 15px rgba(255,255,255,0.1);
+        }
+
+        #receive-line {
+            position: absolute;
+            width: 100%;
+            height: 2px;
+            border-top: 2px dashed rgba(255, 255, 255, 0.2);
+            z-index: 5;
+            display: none;
+        }
+        #just-zone {
+            position: absolute;
+            width: 100%;
+            height: 40px;
+            background: linear-gradient(to bottom, rgba(246, 224, 94, 0.1), transparent);
+            border-top: 1px solid rgba(246, 224, 94, 0.3);
+            z-index: 4;
+            display: none;
+            pointer-events: none;
+        }
+
+        .message-box {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 30px;
+            border-radius: 30px;
+            text-align: center;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+            max-width: 90%;
+            z-index: 100;
+        }
+        
+        .gauge-container {
+            position: absolute;
+            bottom: 120px;
+            width: 120px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .label { font-size: 10px; font-weight: bold; color: #a0aec0; text-transform: uppercase; }
+        .bar-bg { width: 100%; height: 8px; background: #4a5568; border-radius: 4px; overflow: hidden; }
+        .bar-fill { height: 100%; width: 100%; transition: width 0.2s; }
+        .stamina-fill { background: #48bb78; }
+        .stamina-empty { animation: flash-red 0.5s infinite; }
+        @keyframes flash-red {
+            0%, 100% { background-color: #f56565; }
+            50% { background-color: #2d3748; }
+        }
+        .smash-fill { background: #f6e05e; box-shadow: 0 0 10px #f6e05e; }
+        
+        .smash-btn {
+            position: absolute;
+            bottom: 40px;
+            width: 90px;
+            height: 90px;
+            border-radius: 50%;
+            background: #4a5568;
+            color: white;
+            font-weight: 900;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 4px solid #2d3748;
+            opacity: 0.3;
+            transition: all 0.2s;
+            pointer-events: none;
+            z-index: 60;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .smash-btn.active {
+            opacity: 1;
+            background: #ed8936;
+            border-color: #f6e05e;
+            box-shadow: 0 0 25px #ed8936;
+            pointer-events: auto;
+            cursor: pointer;
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        #just-msg, #special-msg, #skill-name, #out-msg, #unblockable-msg {
+            position: absolute;
+            font-weight: 900;
+            font-style: italic;
+            pointer-events: none;
+            z-index: 60;
+            display: none;
+            text-align: center;
+            text-shadow: 2px 2px 15px rgba(0,0,0,0.8);
+        }
+        #just-msg { color: #f6e05e; font-size: 1.5rem; }
+        #out-msg { color: #f56565; font-size: 2rem; }
+        #unblockable-msg { color: #f56565; font-size: 1.2rem; transform: rotate(-5deg); }
+        #special-msg { 
+            font-size: 4rem; 
+            color: #fff; 
+            left: 50%; 
+            top: 40%; 
+            transform: translate(-50%, -50%); 
+        }
+        #skill-name {
+            font-size: 2.5rem;
+            width: 100%;
+            top: 25%;
+            color: #f6e05e;
+        }
+
+        .shake { animation: shake 0.6s cubic-bezier(.36,.07,.19,.97) both; }
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-4px, 0, 0); }
+            20%, 80% { transform: translate3d(8px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-12px, 0, 0); }
+            40%, 60% { transform: translate3d(12px, 0, 0); }
+        }
+
+        .particle {
+            position: absolute;
+            pointer-events: none;
+            border-radius: 50%;
+            z-index: 15;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div id="ui-top" class="absolute top-10 flex flex-col items-center gap-2 z-50">
+        <div id="mode-badge" class="px-3 py-1 rounded-full text-xs font-bold text-white mb-2 uppercase">Mode</div>
+        <div class="flex gap-8 text-2xl font-bold">
+            <div class="text-red-400 bg-black/40 px-4 py-1 rounded-lg backdrop-blur-sm">P1: <span id="score1">0</span></div>
+            <div class="text-blue-400 bg-black/40 px-4 py-1 rounded-lg backdrop-blur-sm">P2: <span id="score2">0</span></div>
+        </div>
+    </div>
+
+    <div class="net"></div>
+    <div id="receive-line"></div>
+    <div id="just-zone"></div>
+    <div id="just-msg">JUST HIT!</div>
+    <div id="out-msg">STAMINA EMPTY!</div>
+    <div id="unblockable-msg">UNSTOPPABLE!!</div>
+    <div id="skill-name">ULTIMATE SMASH</div>
+    <div id="special-msg">FINISH!!</div>
+
+    <div class="gauge-container left-6">
+        <span class="label">Stamina</span>
+        <div class="bar-bg"><div id="stam-p1" class="bar-fill stamina-fill"></div></div>
+        <span class="label">Smash Gauge</span>
+        <div class="bar-bg"><div id="smash-p1" class="bar-fill smash-fill" style="width: 0%"></div></div>
+    </div>
+    <button id="btn-smash-p1" class="smash-btn left-10 text-center">SMASH<br>(D)</button>
+
+    <div class="gauge-container right-6">
+        <span class="label text-right">Stamina</span>
+        <div class="bar-bg"><div id="stam-p2" class="bar-fill stamina-fill"></div></div>
+        <span class="label text-right">Smash Gauge</span>
+        <div class="bar-bg"><div id="smash-p2" class="bar-fill smash-fill" style="width: 0%"></div></div>
+    </div>
+    <button id="btn-smash-p2" class="smash-btn right-10 text-center">SMASH<br>(J)</button>
+
+    <div id="overlay" class="message-box">
+        <h1 id="title" class="text-3xl font-bold mb-4 text-blue-600">ふたりで風船バレー</h1>
+        <div id="mode-selection" class="flex flex-col gap-4">
+            <button id="btn-easy" class="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-8 rounded-xl shadow-md">
+                かんたんモード
+            </button>
+            <button id="btn-pro" class="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-8 rounded-xl shadow-md">
+                競技モード (PRO)<br>
+                <span class="text-xs font-normal">スマッシュは回避不能！</span>
+            </button>
+        </div>
+        <div id="round-result" style="display: none;">
+            <p id="result-text" class="text-2xl font-bold mb-6"></p>
+            <button id="next-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-4 px-10 rounded-full text-xl shadow-lg">
+                次のラウンドへ
+            </button>
+        </div>
+    </div>
+
+    <div id="balloon"></div>
+    <div class="absolute bottom-0 w-full h-4 bg-white/10"></div>
+</div>
+
+<script>
+    window.onload = function() {
+        const BASE_GRAVITY = 0.04;
+        const LIFT = -6.2;
+        const BALLOON_WIDTH = 60;
+        const BALLOON_HEIGHT = 72;
+        const STAMINA_CONSUMPTION = 30;
+        
+        let gameMode = 'easy';
+        let score1 = 0, score2 = 0, rally = 0;
+        let isGameRunning = false;
+        let balloonY = 0, balloonX = 0;
+        let velocityY = 0, velocityX = 0;
+        let stamina1 = 100, stamina2 = 100;
+        let smash1 = 0, smash2 = 0;
+        let activeSmashType = null;
+        let lastHitter = 0; 
+        
+        const container = document.getElementById('game-container');
+        const balloon = document.getElementById('balloon');
+        const overlay = document.getElementById('overlay');
+        const justMsg = document.getElementById('just-msg');
+        const outMsg = document.getElementById('out-msg');
+        const unblockableMsg = document.getElementById('unblockable-msg');
+        const specialMsg = document.getElementById('special-msg');
+        const skillNameMsg = document.getElementById('skill-name');
+        const btnP1 = document.getElementById('btn-smash-p1');
+        const btnP2 = document.getElementById('btn-smash-p2');
+
+        let audioCtx = null;
+        function playSfx(freq, type = 'sine', vol = 0.08, duration = 0.2) {
+            try {
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch (e) {}
+        }
+
+        function createParticles(x, y, color, count = 10) {
+            for (let i = 0; i < count; i++) {
+                const p = document.createElement('div');
+                p.className = 'particle';
+                const size = Math.random() * 8 + 4;
+                p.style.width = size + 'px';
+                p.style.height = size + 'px';
+                p.style.backgroundColor = color;
+                p.style.left = x + 'px';
+                p.style.top = y + 'px';
+                container.appendChild(p);
+
+                const angle = Math.random() * Math.PI * 2;
+                const speed = Math.random() * 5 + 2;
+                const vx = Math.cos(angle) * speed;
+                const vy = Math.sin(angle) * speed;
+                
+                let life = 1;
+                const anim = () => {
+                    life -= 0.02;
+                    if (life <= 0) {
+                        p.remove();
+                        return;
+                    }
+                    p.style.left = (parseFloat(p.style.left) + vx) + 'px';
+                    p.style.top = (parseFloat(p.style.top) + vy) + 'px';
+                    p.style.opacity = life;
+                    requestAnimationFrame(anim);
+                };
+                requestAnimationFrame(anim);
+            }
+        }
+
+        function startGame(mode) {
+            gameMode = mode;
+            score1 = 0; score2 = 0;
+            initRound();
+        }
+
+        function initRound() {
+            document.getElementById('score1').innerText = score1;
+            document.getElementById('score2').innerText = score2;
+            rally = 0;
+            stamina1 = 100; stamina2 = 100;
+            smash1 = 0; smash2 = 0;
+            activeSmashType = null;
+            lastHitter = 0;
+            
+            const modeBadge = document.getElementById('mode-badge');
+            modeBadge.innerText = gameMode === 'pro' ? 'PRO MODE' : 'EASY MODE';
+            modeBadge.className = `px-3 py-1 rounded-full text-xs font-bold text-white mb-2 uppercase ${gameMode === 'pro' ? 'bg-red-600' : 'bg-green-600'}`;
+            
+            const screenW = window.innerWidth;
+            const screenH = window.innerHeight;
+            
+            if (gameMode === 'pro') {
+                const receiveY = screenH * 0.55;
+                const justY = screenH * 0.42;
+                document.getElementById('receive-line').style.top = receiveY + "px";
+                document.getElementById('receive-line').style.display = "block";
+                document.getElementById('just-zone').style.top = justY + "px";
+                document.getElementById('just-zone').style.display = "block";
+                btnP1.style.visibility = "visible";
+                btnP2.style.visibility = "visible";
+            } else {
+                document.getElementById('receive-line').style.display = "none";
+                document.getElementById('just-zone').style.display = "none";
+                btnP1.style.visibility = "hidden";
+                btnP2.style.visibility = "hidden";
+            }
+
+            // 初期位置の設定（最後に点を取った側からサーブ）
+            balloonX = lastHitter === 2 ? screenW * 0.25 : (lastHitter === 1 ? screenW * 0.75 : screenW / 2);
+            balloonX -= BALLOON_WIDTH / 2;
+            balloonY = screenH * 0.15;
+            velocityY = 0;
+            velocityX = (Math.random() - 0.5) * 2;
+
+            overlay.style.display = 'none';
+            specialMsg.style.display = 'none';
+            skillNameMsg.style.display = 'none';
+            outMsg.style.display = 'none';
+            unblockableMsg.style.display = 'none';
+            balloon.style.display = 'block';
+            balloon.className = ''; 
+            balloon.style.backgroundColor = '#f56565';
+            isGameRunning = true;
+            updateUI();
+            requestAnimationFrame(update);
+        }
+
+        function updateUI() {
+            document.getElementById('stam-p1').style.width = stamina1 + "%";
+            document.getElementById('stam-p2').style.width = stamina2 + "%";
+            document.getElementById('smash-p1').style.width = smash1 + "%";
+            document.getElementById('smash-p2').style.width = smash2 + "%";
+            
+            const stam1Fill = document.getElementById('stam-p1');
+            const stam2Fill = document.getElementById('stam-p2');
+            
+            if (stamina1 <= 0) stam1Fill.classList.add('stamina-empty'); else stam1Fill.classList.remove('stamina-empty');
+            if (stamina2 <= 0) stam2Fill.classList.add('stamina-empty'); else stam2Fill.classList.remove('stamina-empty');
+
+            stam1Fill.style.backgroundColor = stamina1 <= 0 ? "" : (stamina1 < 30 ? "#f56565" : "#48bb78");
+            stam2Fill.style.backgroundColor = stamina2 <= 0 ? "" : (stamina2 < 30 ? "#f56565" : "#48bb78");
+
+            if (gameMode === 'pro') {
+                if (smash1 >= 100) btnP1.classList.add('active'); else btnP1.classList.remove('active');
+                if (smash2 >= 100) btnP2.classList.add('active'); else btnP2.classList.remove('active');
+            }
+        }
+
+        function update() {
+            if (!isGameRunning) return;
+
+            let gravity = BASE_GRAVITY + (Math.min(rally, 30) * (gameMode === 'pro' ? 0.007 : 0.002));
+            
+            if (activeSmashType) {
+                if (activeSmashType === 'thunder') gravity += 0.35;
+                if (activeSmashType === 'flame') gravity += 0.25;
+                if (activeSmashType === 'bubble') gravity += 0.1;
+            }
+
+            velocityY += gravity;
+            balloonY += velocityY;
+            balloonX += velocityX;
+
+            stamina1 = Math.min(100, stamina1 + 0.3);
+            stamina2 = Math.min(100, stamina2 + 0.3);
+            updateUI();
+
+            if (balloonX <= 0 || balloonX >= window.innerWidth - BALLOON_WIDTH) {
+                velocityX *= -0.8;
+                balloonX = balloonX <= 0 ? 0 : window.innerWidth - BALLOON_WIDTH;
+            }
+            if (balloonY <= 0) {
+                velocityY = Math.abs(velocityY) * 0.5;
+                balloonY = 0;
+            }
+
+            const centerX = balloonX + BALLOON_WIDTH / 2;
+            const netTop = window.innerHeight * 0.55;
+            if (!activeSmashType && balloonY + BALLOON_HEIGHT > netTop && Math.abs(centerX - window.innerWidth / 2) < 15) {
+                velocityX *= -0.9;
+                balloonX = centerX < window.innerWidth / 2 ? window.innerWidth / 2 - 20 : window.innerWidth / 2 + 20;
+                playSfx(400, 'sine', 0.1, 0.1);
+            }
+
+            balloon.style.left = `${balloonX}px`;
+            balloon.style.top = `${balloonY}px`;
+
+            if (balloonY >= window.innerHeight - (BALLOON_HEIGHT + 10)) {
+                // 着地判定：どちらに落ちたか
+                finishRound(centerX < window.innerWidth / 2 ? 2 : 1);
+            } else {
+                if (activeSmashType) {
+                    const colors = { thunder: '#f6e05e', flame: '#ed8936', bubble: '#fff' };
+                    if (Math.random() > 0.4) createParticles(centerX, balloonY + 30, colors[activeSmashType], 2);
+                }
+                requestAnimationFrame(update);
+            }
+        }
+
+        function showJustEffect() {
+            justMsg.style.left = (balloonX - 20) + "px";
+            justMsg.style.top = (balloonY - 40) + "px";
+            justMsg.style.display = "block";
+            playSfx(1500, 'square', 0.1, 0.1);
+            setTimeout(() => justMsg.style.display = "none", 500);
+        }
+
+        function handleAction(playerNum, isSmashRequest = false) {
+            if (!isGameRunning) return;
+
+            const isPlayer1 = playerNum === 1;
+            
+            if (activeSmashType && lastHitter !== playerNum) {
+                unblockableMsg.style.left = isPlayer1 ? "15%" : "65%";
+                unblockableMsg.style.top = "45%";
+                unblockableMsg.style.display = "block";
+                setTimeout(() => unblockableMsg.style.display = "none", 500);
+                return; 
+            }
+
+            let currentStamina = isPlayer1 ? stamina1 : stamina2;
+
+            if (currentStamina <= 0) {
+                outMsg.style.left = isPlayer1 ? "10%" : "60%";
+                outMsg.style.top = "50%";
+                outMsg.style.display = "block";
+                playSfx(100, 'sine', 0.2, 0.5);
+                velocityY = 15;
+                velocityX = isPlayer1 ? -1 : 1;
+                setTimeout(() => outMsg.style.display = "none", 1000);
+                return;
+            }
+
+            const centerX = balloonX + BALLOON_WIDTH / 2;
+            const screenW = window.innerWidth;
+            const screenH = window.innerHeight;
+            
+            const receiveYLimit = screenH * 0.55;
+            const justYLimit = screenH * 0.42;
+
+            if (gameMode === 'pro' && balloonY > receiveYLimit) return;
+
+            let isJust = false;
+            if (gameMode === 'pro' && balloonY < justYLimit + 40 && balloonY > justYLimit - 20) {
+                isJust = true;
+                if (isPlayer1) smash1 = Math.min(100, smash1 + 35);
+                else smash2 = Math.min(100, smash2 + 35);
+                showJustEffect();
+            }
+
+            const isSideOk = isPlayer1 ? (centerX < screenW / 2 + 40) : (centerX > screenW / 2 - 40);
+            if (isSideOk) {
+                let smashGauge = isPlayer1 ? smash1 : smash2;
+                const performSmash = isSmashRequest && smashGauge >= 100;
+
+                lastHitter = playerNum; 
+
+                if (performSmash) {
+                    const types = ['thunder', 'flame', 'bubble'];
+                    activeSmashType = types[Math.floor(Math.random() * types.length)];
+                    balloon.className = 'smash-' + activeSmashType;
+                    
+                    skillNameMsg.innerText = activeSmashType.toUpperCase() + " SMASH!!";
+                    skillNameMsg.style.color = activeSmashType === 'thunder' ? '#f6e05e' : (activeSmashType === 'flame' ? '#f56565' : '#63b3ed');
+                    skillNameMsg.style.display = 'block';
+                    setTimeout(() => skillNameMsg.style.display = 'none', 1000);
+
+                    velocityY = 18;
+                    const targetX = isPlayer1 ? screenW * 0.8 : screenW * 0.2;
+                    velocityX = (targetX - balloonX) / 15; 
+
+                    if (isPlayer1) smash1 = 0; else smash2 = 0;
+                    playSfx(150, 'sawtooth', 0.4, 0.6);
+                } else {
+                    activeSmashType = null;
+                    balloon.className = '';
+                    
+                    let power = 0.5 + (0.5 * (currentStamina / 100));
+                    if (isJust) power *= 1.2;
+                    
+                    velocityY = LIFT * power;
+                    const baseVX = (isPlayer1 ? 1 : -1) * 3;
+                    velocityX = baseVX + (isPlayer1 ? 1 : -1) * (Math.random() * 2) * power;
+                    
+                    playSfx(isPlayer1 ? 800 : 1000);
+                }
+
+                if (isPlayer1) stamina1 = Math.max(0, stamina1 - STAMINA_CONSUMPTION);
+                else stamina2 = Math.max(0, stamina2 - STAMINA_CONSUMPTION);
+
+                rally++;
+                balloon.classList.remove('hit-effect');
+                void balloon.offsetWidth; 
+                balloon.classList.add('hit-effect');
+                if (!activeSmashType) balloon.style.backgroundColor = isPlayer1 ? '#fc8181' : '#63b3ed';
+                updateUI();
+            }
+        }
+
+        function finishRound(winner) {
+            if (!isGameRunning) return;
+            isGameRunning = false;
+
+            // ポイント加算（ここで行う）
+            if (winner === 1) score1++;
+            else score2++;
+
+            const centerX = balloonX + BALLOON_WIDTH / 2;
+
+            // スマッシュ時の特別演出
+            if (activeSmashType) {
+                specialMsg.style.display = 'block';
+                container.classList.add('shake');
+                playSfx(80, 'sawtooth', 0.4, 0.8);
+                createParticles(centerX, balloonY + BALLOON_HEIGHT, '#fff', 40);
+                setTimeout(() => container.classList.remove('shake'), 600);
+            } else {
+                playSfx(200, 'sine', 0.2, 0.3);
+            }
+
+            // UIのスコア表示更新
+            document.getElementById('score1').innerText = score1;
+            document.getElementById('score2').innerText = score2;
+
+            // バルーン非表示とリザルト画面
+            balloon.style.display = 'none';
+            
+            setTimeout(() => {
+                overlay.style.display = 'block';
+                document.getElementById('mode-selection').style.display = 'none';
+                document.getElementById('round-result').style.display = 'block';
+                const resText = document.getElementById('result-text');
+                resText.innerText = `P${winner} POINT!`;
+                resText.className = `text-3xl font-bold mb-6 ${winner === 1 ? 'text-red-500' : 'text-blue-500'}`;
+            }, activeSmashType ? 800 : 300);
+        }
+
+        document.getElementById('btn-easy').onclick = (e) => { e.stopPropagation(); startGame('easy'); };
+        document.getElementById('btn-pro').onclick = (e) => { e.stopPropagation(); startGame('pro'); };
+        document.getElementById('next-btn').onclick = (e) => { e.stopPropagation(); initRound(); };
+
+        window.addEventListener('keydown', (e) => {
+            const key = e.key.toLowerCase();
+            if (key === 'a') handleAction(1, false);
+            if (key === 'l') handleAction(2, false);
+            if (key === 'd') handleAction(1, true);
+            if (key === 'j') handleAction(2, true);
+            if (!isGameRunning && (key === 'a' || key === 'l' || key === ' ')) {
+                if (document.getElementById('round-result').style.display !== 'none') initRound();
+            }
+        });
+
+        window.addEventListener('touchstart', (e) => {
+            if (e.target.closest('.smash-btn') || e.target.closest('button')) return;
+            e.preventDefault();
+            const x = e.touches[0].clientX;
+            handleAction(x < window.innerWidth / 2 ? 1 : 2, false);
+        }, { passive: false });
+
+        window.addEventListener('mousedown', (e) => {
+            if (e.target.closest('.smash-btn') || e.target.closest('button')) return;
+            handleAction(e.clientX < window.innerWidth / 2 ? 1 : 2, false);
+        });
+
+        const smashHandler1 = (e) => { e.stopPropagation(); e.preventDefault(); handleAction(1, true); };
+        const smashHandler2 = (e) => { e.stopPropagation(); e.preventDefault(); handleAction(2, true); };
+        btnP1.addEventListener('touchstart', smashHandler1, { passive: false });
+        btnP2.addEventListener('touchstart', smashHandler2, { passive: false });
+        btnP1.addEventListener('mousedown', smashHandler1);
+        btnP2.addEventListener('mousedown', smashHandler2);
+    };
+</script>
+</body>
+</html>
